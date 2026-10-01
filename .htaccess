@@ -1,0 +1,6 @@
+# TinySA Ultra Data Portal
+# Allow the PHP upload/list endpoints; serve static files normally.
+<IfModule mod_php.c>
+  AddHandler application/x-httpd-php .php
+</IfModule>
+DirectoryIndex index.html

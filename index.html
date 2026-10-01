@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TinySA Ultra Data Portal</title>
+<style>
+  :root { --bg:#0f1419; --card:#1a2332; --accent:#3d9cf0; --text:#e7ecf3; --muted:#8b9bb4; --ok:#3dd68c; --warn:#f0b429; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background:var(--bg); color:var(--text); line-height:1.5; }
+  header { background:var(--card); border-bottom:1px solid #2a3548; padding:20px 24px; }
+  header h1 { margin:0; font-size:1.4rem; }
+  header p { margin:4px 0 0; color:var(--muted); font-size:0.95rem; }
+  main { max-width:900px; margin:0 auto; padding:24px; }
+  .card { background:var(--card); border:1px solid #2a3548; border-radius:10px; padding:20px; margin-bottom:20px; }
+  h2 { margin-top:0; font-size:1.15rem; }
+  label { display:block; font-size:0.9rem; color:var(--muted); margin-bottom:6px; }
+  input[type=text], select, textarea { width:100%; padding:10px 12px; border-radius:6px; border:1px solid #2a3548; background:#0f1419; color:var(--text); font-size:0.95rem; margin-bottom:14px; }
+  textarea { min-height:90px; resize:vertical; }
+  .row { display:flex; gap:14px; flex-wrap:wrap; }
+  .row > div { flex:1; min-width:200px; }
+  button { background:var(--accent); color:#fff; border:none; border-radius:6px; padding:10px 20px; font-size:0.95rem; cursor:pointer; }
+  button:hover { filter:brightness(1.1); }
+  button:disabled { opacity:0.5; cursor:not-allowed; }
+  #status { margin-top:12px; font-size:0.9rem; }
+  .ok { color:var(--ok); } .err { color:#ff6b6b; } .warn { color:var(--warn); }
+  table { width:100%; border-collapse:collapse; font-size:0.9rem; }
+  th, td { text-align:left; padding:8px 10px; border-bottom:1px solid #2a3548; }
+  th { color:var(--muted); font-weight:600; }
+  a { color:var(--accent); }
+  .hint { color:var(--muted); font-size:0.85rem; }
+  .tag { display:inline-block; padding:2px 8px; border-radius:4px; background:#2a3548; font-size:0.8rem; margin-right:4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>TinySA Ultra Data Portal</h1>
+  <p>RF characterization data from TinySA Ultra spectrum analyzer captures &mdash; Hively / SLW hardware experiments (Dan Britton &amp; Steve Morris)</p>
+</header>
+<main>
+
+  <div class="card">
+    <h2>Upload a capture</h2>
+    <p class="hint">Export from the TinySA Ultra as CSV (touchscreen: Measure &rarr; Export, or PC software &rarr; File &rarr; Export CSV). S2P touchstone files also accepted. Files land in <code>data/uploads/</code> in this repo.</p>
+    <form id="uploadForm">
+      <div class="row">
+        <div>
+          <label for="file">File (.csv or .s2p)</label>
+          <input type="file" id="file" name="file" accept=".csv,.s2p,text/csv" required>
+        </div>
+        <div>
+          <label for="exp">Experiment ID</label>
+          <input type="text" id="exp" name="exp" placeholder="e.g. DD-433-v2, bifilar-coil-v3" required>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label for="freq">Center frequency</label>
+          <input type="text" id="freq" name="freq" placeholder="e.g. 433 MHz, 1.3 GHz">
+        </div>
+        <div>
+          <label for="notes">Notes</label>
+          <input type="text" id="notes" name="notes" placeholder="setup, antenna, cage, etc.">
+        </div>
+      </div>
+      <button type="submit" id="btn">Upload</button>
+      <div id="status"></div>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Captured files</h2>
+    <div id="fileList"><span class="hint">Loading&mldr;</span></div>
+  </div>
+
+  <div class="card">
+    <h2>How to use</h2>
+    <ol>
+      <li>Run the TinySA Ultra, capture your sweep (touchscreen or PC software).</li>
+      <li>Export as CSV from the analyzer or the PC app.</li>
+      <li>Upload here with an experiment ID so files sort themselves.</li>
+      <li>The file is committed to the repo under <code>data/uploads/&lt;experiment&gt;-&lt;timestamp&gt;.csv</code> &mdash; versioned, backed up, shareable with Dr. Hively.</li>
+    </ol>
+    <p class="hint">CSV format: frequency (Hz), amplitude (dBm) per row, as exported by the TinySA. S2P: standard touchstone, any number of ports.</p>
+  </div>
+
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const form = $("uploadForm");
+const statusEl = $("status");
+const listEl = $("fileList");
+
+form.addEventListener("submit", async e => {
+  e.preventDefault();
+  const f = $("file").files[0];
+  if (!f) return;
+  const fd = new FormData(form);
+  fd.set("file", f);
+  statusEl.textContent = "Uploading&mldr;";
+  statusEl.className = "";
+  try {
+    const r = await fetch("upload.php", { method:"POST", body: fd });
+    const j = await r.json();
+    if (j.ok) {
+      statusEl.textContent = "Saved as " + j.filename;
+      statusEl.className = "ok";
+      form.reset();
+      loadList();
+    } else {
+      statusEl.textContent = j.error || "Upload failed";
+      statusEl.className = "err";
+    }
+  } catch (err) {
+    statusEl.textContent = "Network error: " + err.message;
+    statusEl.className = "err";
+  }
+});
+
+async function loadList() {
+  try {
+    const r = await fetch("list.php");
+    const j = await r.json();
+    if (!j.ok) { listEl.innerHTML = "<span class='hint'>Could not load list.</span>"; return; }
+    if (!j.files.length) { listEl.innerHTML = "<span class='hint'>No files uploaded yet.</span>"; return; }
+    let html = "<table><tr><th>File</th><th>Experiment</th><th>Size</th><th>Modified</th></tr>";
+    for (const f of j.files) {
+      html += "<tr><td><a href='data/uploads/" + encodeURIComponent(f.name) + "' download>" + f.name + "</a></td><td>" + (f.exp||"&mdash;") + "</td><td>" + f.size + "</td><td>" + f.mtime + "</td></tr>";
+    }
+    html += "</table>";
+    listEl.innerHTML = html;
+  } catch (e) {
+    listEl.innerHTML = "<span class='hint'>Could not load list.</span>";
+  }
+}
+loadList();
+</script>
+</body>
+</html>
